@@ -1,0 +1,1 @@
+pyinstaller --onefile --windowed --icon=icon.ico --add-data "config.json;." main.py

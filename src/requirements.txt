@@ -1,0 +1,7 @@
+hidapi
+pystray
+keyboard
+customtkinter
+sounddevice
+pillow
+pyinstaller
