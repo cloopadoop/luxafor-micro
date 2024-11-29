@@ -1,0 +1,1 @@
+pyinstaller --noconsole --onefile --icon=src/icon.ico --name "Luxafor Micro" src\main.py

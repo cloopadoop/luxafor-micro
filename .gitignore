@@ -1,0 +1,5 @@
+*.json
+*.spec
+*.pyc
+/build
+/dist
