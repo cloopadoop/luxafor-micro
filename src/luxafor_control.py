@@ -10,6 +10,7 @@ class LuxaforControl:
         self.PRODUCT_ID = 0xf372
         self.device = None
         self.config_file = Path("config.json")
+        self.hotkeys_file = Path("hotkeys.json")
         self.default_colors = {
             "Red": [255, 0, 0],
             "Green": [0, 255, 0],
@@ -19,6 +20,7 @@ class LuxaforControl:
             "White": [255, 255, 255]
         }
         self.saved_colors = self.load_config()
+        self.hotkeys = self.load_hotkeys()
         self.current_color = None
         self.party_mode_active = False
         self.connect_device()
@@ -41,22 +43,37 @@ class LuxaforControl:
             return False
 
     def set_color(self, r, g, b, led=255):
-        return self.write_command([0x00, 0x01, led, r, g, b, 0x00, 0x00, 0x00])
+        if not self.party_mode_active:
+            self.current_color = [r, g, b]
+            return self.write_command([0x00, 0x01, led, r, g, b, 0x00, 0x00, 0x00])
+        return False
 
     def fade_color(self, r, g, b, duration=20, led=255):
-        return self.write_command([0x00, 0x02, led, r, g, b, duration, 0x00, 0x00])
+        if not self.party_mode_active:
+            self.current_color = [r, g, b]
+            return self.write_command([0x00, 0x02, led, r, g, b, duration, 0x00, 0x00])
+        return False
 
     def strobe_effect(self, r=255, g=0, b=0, speed=20, repeat=5, led=255):
-        return self.write_command([0x00, 0x03, led, r, g, b, speed, repeat, 0x00])
+        if not self.party_mode_active:
+            return self.write_command([0x00, 0x03, led, r, g, b, speed, repeat, 0x00])
+        return False
 
     def wave_effect(self, wave_type=4, r=0, g=0, b=255, repeat=3, speed=20):
-        return self.write_command([0x00, 0x04, wave_type, r, g, b, 0x00, repeat, speed])
+        if not self.party_mode_active:
+            return self.write_command([0x00, 0x04, wave_type, r, g, b, 0x00, repeat, speed])
+        return False
 
     def pattern_effect(self, pattern=1, repeat=3):
-        return self.write_command([0x00, 0x06, pattern, repeat, 0x00, 0x00, 0x00, 0x00, 0x00])
+        if not self.party_mode_active:
+            return self.write_command([0x00, 0x06, pattern, repeat, 0x00, 0x00, 0x00, 0x00, 0x00])
+        return False
 
     def turn_off(self):
-        return self.set_color(0, 0, 0)
+        if not self.party_mode_active:
+            self.current_color = None
+            return self.set_color(0, 0, 0)
+        return False
 
     def load_config(self):
         try:
@@ -68,6 +85,17 @@ class LuxaforControl:
     def save_config(self):
         with open(self.config_file, 'w') as f:
             json.dump(self.saved_colors, f)
+
+    def load_hotkeys(self):
+        try:
+            with open(self.hotkeys_file, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+
+    def save_hotkeys(self):
+        with open(self.hotkeys_file, 'w') as f:
+            json.dump(self.hotkeys, f)
 
     def reset_to_defaults(self):
         self.saved_colors = self.default_colors.copy()

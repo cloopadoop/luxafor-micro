@@ -1,13 +1,19 @@
 import customtkinter as ctk
 from luxafor_control import LuxaforControl
 from CTkColorPicker import *
+import keyboard
+import threading
 
 class LuxaforGUI:
     def __init__(self):
         self.controller = LuxaforControl()
         self.root = ctk.CTk()
         self.root.title("Luxafor Control")
-        self.root.geometry("500x400")
+        self.root.geometry("500x500")
+        
+        # Handle window close and minimize
+        self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
+        self.root.bind("<Unmap>", lambda e: self.minimize_to_tray() if self.root.state() == 'iconic' else None)
         
         # Main container
         self.main_frame = ctk.CTkFrame(self.root)
@@ -35,6 +41,12 @@ class LuxaforGUI:
         self.effects_frame.pack(fill="x", padx=10, pady=10)
         
         self.create_effects_controls()
+        
+        # Hotkeys frame
+        self.hotkeys_frame = ctk.CTkFrame(self.main_frame)
+        self.hotkeys_frame.pack(fill="x", padx=10, pady=10)
+        
+        self.create_hotkey_controls()
 
     def create_color_grid(self):
         # Clear existing widgets
@@ -128,15 +140,64 @@ class LuxaforGUI:
             effects,
             text="⚡ Strobe",
             width=80,
-            command=lambda: self.controller.strobe_effect()
+            command=lambda: self.controller.strobe_effect(*self.controller.current_color if self.controller.current_color else (255,0,0))
         ).pack(side="left", padx=5)
         
-        ctk.CTkButton(
+        self.party_btn = ctk.CTkButton(
             effects,
-            text="🎉 Party",
+            text="🎉 Party Mode",
             width=80,
             command=self.toggle_party_mode
-        ).pack(side="left", padx=5)
+        )
+        self.party_btn.pack(side="left", padx=5)
+
+    def create_hotkey_controls(self):
+        ctk.CTkLabel(self.hotkeys_frame, text="Hotkeys").pack(anchor="w", padx=5, pady=(5,0))
+        
+        hotkeys_grid = ctk.CTkFrame(self.hotkeys_frame)
+        hotkeys_grid.pack(fill="x", padx=5, pady=5)
+        
+        actions = {
+            "Toggle Red": "ctrl+alt+r",
+            "Toggle Green": "ctrl+alt+g",
+            "Turn Off": "ctrl+alt+o"
+        }
+        
+        row = 0
+        for action, default_key in actions.items():
+            ctk.CTkLabel(hotkeys_grid, text=action).grid(row=row, column=0, padx=5, pady=2)
+            
+            entry = ctk.CTkEntry(hotkeys_grid, width=100)
+            entry.insert(0, self.controller.hotkeys.get(action, default_key))
+            entry.grid(row=row, column=1, padx=5, pady=2)
+            
+            ctk.CTkButton(
+                hotkeys_grid,
+                text="Save",
+                width=60,
+                command=lambda a=action, e=entry: self.save_hotkey(a, e.get())
+            ).grid(row=row, column=2, padx=5, pady=2)
+            
+            row += 1
+
+    def save_hotkey(self, action, key):
+        old_key = self.controller.hotkeys.get(action)
+        if old_key:
+            keyboard.remove_hotkey(old_key)
+        
+        self.controller.hotkeys[action] = key
+        self.controller.save_hotkeys()
+        self.setup_hotkeys()
+
+    def setup_hotkeys(self):
+        for action, key in self.controller.hotkeys.items():
+            if action == "Toggle Red":
+                keyboard.add_hotkey(key, lambda: self.controller.set_color(255, 0, 0))
+            elif action == "Toggle Green":
+                keyboard.add_hotkey(key, lambda: self.controller.set_color(0, 255, 0))
+            elif action == "Turn Off":
+                keyboard.add_hotkey(key, self.controller.turn_off)
+
 
     def reset_colors(self):
         self.controller.reset_to_defaults()
@@ -167,7 +228,14 @@ class LuxaforGUI:
             self.create_color_grid()
 
     def toggle_party_mode(self):
-        self.controller.toggle_party_mode()
+        if self.controller.party_mode_active:
+            self.controller.party_mode_active = False
+            self.party_btn.configure(text="🎉 Party Mode")
+        else:
+            self.controller.party_mode_active = True
+            self.party_btn.configure(text="🎉 Stop Party")
+            threading.Thread(target=self.controller.start_party_mode, daemon=True).start()
 
     def run(self):
+        self.setup_hotkeys()
         self.root.mainloop()
