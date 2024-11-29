@@ -2,7 +2,6 @@ import customtkinter as ctk
 from luxafor_control import LuxaforControl
 from CTkColorPicker import *
 import keyboard
-import threading
 
 class LuxaforGUI:
     def __init__(self):
@@ -49,107 +48,104 @@ class LuxaforGUI:
         self.create_hotkey_controls()
 
     def create_color_grid(self):
-        # Clear existing widgets
         for widget in self.colors_frame.winfo_children():
             widget.destroy()
             
-        # Add "Off" button first
-        off_btn = ctk.CTkButton(
-            self.colors_frame,
-            text="OFF",
-            width=60,
-            height=60,
+        row = 0
+        col = 0
+        
+        # Add "Off" button with dummy controls
+        self.create_button_with_controls(
+            "OFF", None, row, col,
+            command=self.controller.turn_off,
             fg_color="#333333",
             hover_color="#444444",
-            command=self.controller.turn_off
+            show_controls=False
         )
-        off_btn.grid(row=0, column=0, padx=5, pady=5)
         
-        row = 0
-        col = 1
+        col += 1
+        
+        # Add color buttons
         for color_name, rgb in self.controller.saved_colors.items():
             hex_color = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
-            
-            # Container for color button and controls
-            container = ctk.CTkFrame(self.colors_frame, fg_color="transparent")
-            container.grid(row=row, column=col, padx=5, pady=5)
-            
-            # Color button
-            btn = ctk.CTkButton(
-                container,
-                text="",
-                width=60,
-                height=60,
+            self.create_button_with_controls(
+                "", rgb, row, col,
+                command=lambda c=rgb: self.controller.set_color(*c),
                 fg_color=hex_color,
                 hover_color=hex_color,
-                command=lambda c=rgb: self.controller.set_color(*c)
+                color_name=color_name
             )
-            btn.pack(side="left")
-            
-            # Controls container
-            controls = ctk.CTkFrame(container, fg_color="transparent")
-            controls.pack(side="left", padx=2)
-            
-            # Edit button
-            ctk.CTkButton(
-                controls,
-                text="✏️",
-                width=25,
-                height=25,
-                command=lambda name=color_name: self.edit_color(name)
-            ).pack(pady=1)
-            
-            # Delete button
-            ctk.CTkButton(
-                controls,
-                text="🗑️",
-                width=25,
-                height=25,
-                fg_color="darkred",
-                hover_color="red",
-                command=lambda name=color_name: self.delete_color(name)
-            ).pack(pady=1)
             
             col += 1
             if col > 4:
                 col = 0
                 row += 1
         
-        # Add new color button
-        add_btn = ctk.CTkButton(
-            self.colors_frame,
-            text="+",
+        # Add new color button with dummy controls
+        self.create_button_with_controls(
+            "+", None, row if col == 0 else row + 1, 0,
+            command=self.add_new_color,
+            show_controls=False
+        )
+
+    def create_button_with_controls(self, text, color, row, col, command, 
+                                  fg_color=None, hover_color=None, 
+                                  color_name=None, show_controls=True):
+        container = ctk.CTkFrame(self.colors_frame, fg_color="transparent")
+        container.grid(row=row, column=col, padx=5, pady=5)
+        
+        btn = ctk.CTkButton(
+            container,
+            text=text,
             width=60,
             height=60,
-            command=self.add_new_color
+            fg_color=fg_color if fg_color else "gray",
+            hover_color=hover_color if hover_color else "darkgray",
+            command=command
         )
-        add_btn.grid(row=row if col == 0 else row + 1, column=0, padx=5, pady=5)
+        btn.pack(side="left")
+        
+        if show_controls:
+            controls = ctk.CTkFrame(container, fg_color="transparent")
+            controls.pack(side="left", padx=2)
+            
+            ctk.CTkButton(
+                controls,
+                text="⟳",  # or "⚙️"
+                width=30,
+                height=30,
+                command=lambda: self.edit_color(color_name) if color_name else None
+            ).pack(pady=1)
+            
+            ctk.CTkButton(
+                controls,
+                text="−",  # or "❌"
+                width=30,
+                height=30,
+                fg_color="darkred",
+                hover_color="red",
+                command=lambda: self.delete_color(color_name) if color_name else None
+            ).pack(pady=1)
 
     def create_effects_controls(self):
         effects = ctk.CTkFrame(self.effects_frame)
         effects.pack(fill="x", pady=5)
         
-        ctk.CTkButton(
+        self.wave_btn = ctk.CTkButton(
             effects,
             text="🌊 Wave",
             width=80,
-            command=lambda: self.controller.wave_effect()
-        ).pack(side="left", padx=5)
+            command=self.toggle_wave
+        )
+        self.wave_btn.pack(side="left", padx=5)
         
-        ctk.CTkButton(
+        self.strobe_btn = ctk.CTkButton(
             effects,
             text="⚡ Strobe",
             width=80,
-            command=lambda: self.controller.strobe_effect(*self.controller.current_color if self.controller.current_color else (255,0,0))
-        ).pack(side="left", padx=5)
-        
-        self.party_btn = ctk.CTkButton(
-            effects,
-            text="🎉 Party Mode",
-            width=80,
-            command=self.toggle_party_mode
+            command=self.toggle_strobe
         )
-        self.party_btn.pack(side="left", padx=5)
+        self.strobe_btn.pack(side="left", padx=5)
 
     def create_hotkey_controls(self):
         ctk.CTkLabel(self.hotkeys_frame, text="Hotkeys").pack(anchor="w", padx=5, pady=(5,0))
@@ -158,9 +154,9 @@ class LuxaforGUI:
         hotkeys_grid.pack(fill="x", padx=5, pady=5)
         
         actions = {
-            "Toggle Red": "ctrl+alt+r",
-            "Toggle Green": "ctrl+alt+g",
-            "Turn Off": "ctrl+alt+o"
+            "Cycle Green/Red/Off": "ctrl+alt+1",
+            "Toggle On/Off": "ctrl+alt+2",
+            "Next Color": "ctrl+alt+3"
         }
         
         row = 0
@@ -168,36 +164,43 @@ class LuxaforGUI:
             ctk.CTkLabel(hotkeys_grid, text=action).grid(row=row, column=0, padx=5, pady=2)
             
             entry = ctk.CTkEntry(hotkeys_grid, width=100)
-            entry.insert(0, self.controller.hotkeys.get(action, default_key))
+            entry.insert(0, default_key)
             entry.grid(row=row, column=1, padx=5, pady=2)
-            
-            ctk.CTkButton(
-                hotkeys_grid,
-                text="Save",
-                width=60,
-                command=lambda a=action, e=entry: self.save_hotkey(a, e.get())
-            ).grid(row=row, column=2, padx=5, pady=2)
             
             row += 1
 
-    def save_hotkey(self, action, key):
-        old_key = self.controller.hotkeys.get(action)
-        if old_key:
-            keyboard.remove_hotkey(old_key)
-        
-        self.controller.hotkeys[action] = key
-        self.controller.save_hotkeys()
-        self.setup_hotkeys()
+    def toggle_wave(self):
+        self.controller.wave_active = not self.controller.wave_active
+        if self.controller.wave_active:
+            self.wave_btn.configure(fg_color="darkblue")
+            if self.controller.current_color:
+                self.controller.wave_effect(*self.controller.current_color)
+            else:
+                self.controller.wave_effect()
+        else:
+            self.wave_btn.configure(fg_color=None)
+            if self.controller.last_color:
+                self.controller.set_color(*self.controller.last_color)
+            else:
+                self.controller.turn_off()
 
-    def setup_hotkeys(self):
-        for action, key in self.controller.hotkeys.items():
-            if action == "Toggle Red":
-                keyboard.add_hotkey(key, lambda: self.controller.set_color(255, 0, 0))
-            elif action == "Toggle Green":
-                keyboard.add_hotkey(key, lambda: self.controller.set_color(0, 255, 0))
-            elif action == "Turn Off":
-                keyboard.add_hotkey(key, self.controller.turn_off)
+    def toggle_strobe(self):
+        self.controller.strobe_active = not self.controller.strobe_active
+        if self.controller.strobe_active:
+            self.strobe_btn.configure(fg_color="darkblue")
+            if self.controller.current_color:
+                self.controller.strobe_effect(*self.controller.current_color)
+            else:
+                self.controller.strobe_effect()
+        else:
+            self.strobe_btn.configure(fg_color=None)
+            if self.controller.last_color:
+                self.controller.set_color(*self.controller.last_color)
+            else:
+                self.controller.turn_off()
 
+    def minimize_to_tray(self):
+        self.root.withdraw()
 
     def reset_colors(self):
         self.controller.reset_to_defaults()
@@ -227,14 +230,12 @@ class LuxaforGUI:
             self.controller.save_config()
             self.create_color_grid()
 
-    def toggle_party_mode(self):
-        if self.controller.party_mode_active:
-            self.controller.party_mode_active = False
-            self.party_btn.configure(text="🎉 Party Mode")
-        else:
-            self.controller.party_mode_active = True
-            self.party_btn.configure(text="🎉 Stop Party")
-            threading.Thread(target=self.controller.start_party_mode, daemon=True).start()
+    def setup_hotkeys(self):
+        keyboard.add_hotkey('ctrl+alt+1', self.controller.cycle_green_red_off)
+        keyboard.add_hotkey('ctrl+alt+2', lambda: self.controller.restore_last_color() 
+                          if not self.controller.current_color 
+                          else self.controller.turn_off())
+        keyboard.add_hotkey('ctrl+alt+3', lambda: self.controller.set_color(*self.controller.get_next_color()))
 
     def run(self):
         self.setup_hotkeys()

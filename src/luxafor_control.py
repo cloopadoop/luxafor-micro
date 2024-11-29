@@ -10,7 +10,6 @@ class LuxaforControl:
         self.PRODUCT_ID = 0xf372
         self.device = None
         self.config_file = Path("config.json")
-        self.hotkeys_file = Path("hotkeys.json")
         self.default_colors = {
             "Red": [255, 0, 0],
             "Green": [0, 255, 0],
@@ -20,11 +19,12 @@ class LuxaforControl:
             "White": [255, 255, 255]
         }
         self.saved_colors = self.load_config()
-        self.hotkeys = self.load_hotkeys()
         self.current_color = None
-        self.party_mode_active = False
+        self.last_color = None
+        self.wave_active = False
+        self.strobe_active = False
         self.connect_device()
-
+        
     def connect_device(self):
         try:
             self.device = hid.device()
@@ -43,36 +43,33 @@ class LuxaforControl:
             return False
 
     def set_color(self, r, g, b, led=255):
-        if not self.party_mode_active:
+        if not (self.wave_active or self.strobe_active):
+            self.last_color = self.current_color
             self.current_color = [r, g, b]
             return self.write_command([0x00, 0x01, led, r, g, b, 0x00, 0x00, 0x00])
         return False
 
     def fade_color(self, r, g, b, duration=20, led=255):
-        if not self.party_mode_active:
+        if not (self.wave_active or self.strobe_active):
+            self.last_color = self.current_color
             self.current_color = [r, g, b]
             return self.write_command([0x00, 0x02, led, r, g, b, duration, 0x00, 0x00])
         return False
 
     def strobe_effect(self, r=255, g=0, b=0, speed=20, repeat=5, led=255):
-        if not self.party_mode_active:
-            return self.write_command([0x00, 0x03, led, r, g, b, speed, repeat, 0x00])
-        return False
+        return self.write_command([0x00, 0x03, led, r, g, b, speed, repeat, 0x00])
 
     def wave_effect(self, wave_type=4, r=0, g=0, b=255, repeat=3, speed=20):
-        if not self.party_mode_active:
-            return self.write_command([0x00, 0x04, wave_type, r, g, b, 0x00, repeat, speed])
-        return False
-
-    def pattern_effect(self, pattern=1, repeat=3):
-        if not self.party_mode_active:
-            return self.write_command([0x00, 0x06, pattern, repeat, 0x00, 0x00, 0x00, 0x00, 0x00])
-        return False
+        return self.write_command([0x00, 0x04, wave_type, r, g, b, 0x00, repeat, speed])
 
     def turn_off(self):
-        if not self.party_mode_active:
-            self.current_color = None
-            return self.set_color(0, 0, 0)
+        self.last_color = self.current_color
+        self.current_color = None
+        return self.set_color(0, 0, 0)
+
+    def restore_last_color(self):
+        if self.last_color:
+            return self.set_color(*self.last_color)
         return False
 
     def load_config(self):
@@ -86,31 +83,26 @@ class LuxaforControl:
         with open(self.config_file, 'w') as f:
             json.dump(self.saved_colors, f)
 
-    def load_hotkeys(self):
-        try:
-            with open(self.hotkeys_file, 'r') as f:
-                return json.load(f)
-        except:
-            return {}
-
-    def save_hotkeys(self):
-        with open(self.hotkeys_file, 'w') as f:
-            json.dump(self.hotkeys, f)
-
     def reset_to_defaults(self):
         self.saved_colors = self.default_colors.copy()
         self.save_config()
 
-    def start_party_mode(self):
-        import random
-        while self.party_mode_active:
-            r = random.randint(0, 255)
-            g = random.randint(0, 255)
-            b = random.randint(0, 255)
-            self.fade_color(r, g, b, duration=10)
-            time.sleep(0.5)
+    def get_next_color(self):
+        if not self.current_color:
+            return list(self.saved_colors.values())[0]
+        
+        color_values = list(self.saved_colors.values())
+        try:
+            current_index = color_values.index(self.current_color)
+            next_index = (current_index + 1) % len(color_values)
+            return color_values[next_index]
+        except ValueError:
+            return color_values[0]
 
-    def toggle_party_mode(self):
-        self.party_mode_active = not self.party_mode_active
-        if self.party_mode_active:
-            threading.Thread(target=self.start_party_mode, daemon=True).start()
+    def cycle_green_red_off(self):
+        if not self.current_color:
+            return self.set_color(0, 255, 0)  # Green
+        elif self.current_color == [0, 255, 0]:  # If Green
+            return self.set_color(255, 0, 0)  # Red
+        else:
+            return self.turn_off()
