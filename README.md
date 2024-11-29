@@ -1,4 +1,4 @@
-# Luxafor Mini Controller
+# Luxafor Micro Controller
 
 A simple tray application to control the Luxafor Flag USB LED light.
 
