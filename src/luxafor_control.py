@@ -1,13 +1,7 @@
 import json
-import sys
 import hid
-import pystray
-from PIL import Image
-import keyboard
-import customtkinter as ctk
+import time
 import threading
-import sounddevice as sd
-import numpy as np
 from pathlib import Path
 
 class LuxaforControl:
@@ -28,7 +22,7 @@ class LuxaforControl:
         self.current_color = None
         self.party_mode_active = False
         self.connect_device()
-        
+
     def connect_device(self):
         try:
             self.device = hid.device()
@@ -37,16 +31,29 @@ class LuxaforControl:
         except Exception:
             return False
 
-    def set_color(self, r, g, b):
-        if not self.device:
-            if not self.connect_device():
-                return False
+    def write_command(self, command):
+        if not self.device and not self.connect_device():
+            return False
         try:
-            self.device.write([0x00, 0x01, r, g, b, 0x00, 0x00, 0x00])
-            self.current_color = [r, g, b]
+            self.device.write(command)
             return True
         except Exception:
             return False
+
+    def set_color(self, r, g, b, led=255):
+        return self.write_command([0x00, 0x01, led, r, g, b, 0x00, 0x00, 0x00])
+
+    def fade_color(self, r, g, b, duration=20, led=255):
+        return self.write_command([0x00, 0x02, led, r, g, b, duration, 0x00, 0x00])
+
+    def strobe_effect(self, r=255, g=0, b=0, speed=20, repeat=5, led=255):
+        return self.write_command([0x00, 0x03, led, r, g, b, speed, repeat, 0x00])
+
+    def wave_effect(self, wave_type=4, r=0, g=0, b=255, repeat=3, speed=20):
+        return self.write_command([0x00, 0x04, wave_type, r, g, b, 0x00, repeat, speed])
+
+    def pattern_effect(self, pattern=1, repeat=3):
+        return self.write_command([0x00, 0x06, pattern, repeat, 0x00, 0x00, 0x00, 0x00, 0x00])
 
     def turn_off(self):
         return self.set_color(0, 0, 0)
@@ -61,3 +68,21 @@ class LuxaforControl:
     def save_config(self):
         with open(self.config_file, 'w') as f:
             json.dump(self.saved_colors, f)
+
+    def reset_to_defaults(self):
+        self.saved_colors = self.default_colors.copy()
+        self.save_config()
+
+    def start_party_mode(self):
+        import random
+        while self.party_mode_active:
+            r = random.randint(0, 255)
+            g = random.randint(0, 255)
+            b = random.randint(0, 255)
+            self.fade_color(r, g, b, duration=10)
+            time.sleep(0.5)
+
+    def toggle_party_mode(self):
+        self.party_mode_active = not self.party_mode_active
+        if self.party_mode_active:
+            threading.Thread(target=self.start_party_mode, daemon=True).start()

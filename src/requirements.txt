@@ -5,3 +5,4 @@ customtkinter
 sounddevice
 pillow
 pyinstaller
+CTkColorPicker

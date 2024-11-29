@@ -1,5 +1,6 @@
 import sys
 from gui import LuxaforGUI
+from luxafor_control import LuxaforControl
 from tray import create_tray_icon
 import threading
 
